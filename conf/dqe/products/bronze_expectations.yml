@@ -1,0 +1,10 @@
+# Bronze expectations for products.
+# sdp-meta quarantine semantics (v0.1.0): the quarantine table KEEPS rows matching the
+# expect_or_quarantine rule, so that rule describes the BAD rows. Pair it with the inverse
+# expect_or_drop rule so the main table excludes them.
+expect_or_drop:
+  valid_product_id: "product_id IS NOT NULL"
+expect_or_quarantine:
+  invalid_product_id: "product_id IS NULL"
+expect:
+  no_rescued_data: "_rescued_data IS NULL"

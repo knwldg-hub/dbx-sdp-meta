@@ -1,0 +1,92 @@
+# All knobs for the sdp-meta retail demo bundle (from the sdp-meta v0.1.0 template, adapted).
+# Override per target in databricks.yml under `targets.<name>.variables`.
+
+variables:
+  uc_catalog_name:
+    description: Unity Catalog catalog holding all sdp_meta_* schemas.
+    default: mg_aws_serverless_workspace_catalog
+
+  sdp_meta_schema:
+    description: Control schema - holds bronze_dataflowspec / silver_dataflowspec and the config volume.
+    default: sdp_meta_control
+
+  bronze_target_schema:
+    description: Schema where the bronze pipelines write tables (incl. <table>_quarantine).
+    default: sdp_meta_bronze
+
+  silver_target_schema:
+    description: Schema where the silver pipelines write tables.
+    default: sdp_meta_silver
+
+  gold_target_schema:
+    description: Schema for the hand-written gold pipeline and metric views.
+    default: sdp_meta_gold
+
+  landing_volume_path:
+    description: Root of the landing volume (source files, one folder per group/table).
+    default: /Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files
+
+  layer:
+    description: Layer to onboard. One of `bronze`, `silver`, `bronze_silver`.
+    default: bronze_silver
+
+  pipeline_mode:
+    description: split = separate bronze and silver pipelines per group (decision 5, option A).
+    default: split
+
+  reference_group:
+    description: data_flow_group for slow-changing reference data.
+    default: retail_reference
+
+  sales_group:
+    description: data_flow_group for sales transactions.
+    default: retail_sales
+
+  onboarding_file_name:
+    description: Filename (inside conf/) of the onboarding file.
+    default: onboarding.yml
+
+  conf_volume:
+    description: UC volume (inside sdp_meta_schema) that stage_conf copies conf/ into.
+    default: config
+
+  bronze_dataflowspec_table:
+    description: Bronze dataflowspec table name inside sdp_meta_schema.
+    default: bronze_dataflowspec
+
+  silver_dataflowspec_table:
+    description: Silver dataflowspec table name inside sdp_meta_schema.
+    default: silver_dataflowspec
+
+  dataflowspec_version:
+    description: Value written to the `version` column of dataflowspec rows.
+    default: v1
+
+  sdp_meta_version:
+    description: Stamped on every pipeline as the `sdp_meta` tag (discovery in the sdp-meta App / UI).
+    default: "0.1.0"
+
+  author:
+    description: Value written to the `import_author` column of dataflowspec rows.
+    default: mayur.gupta@databricks.com
+
+  overwrite_dataflowspecs:
+    description: If "True", onboarding overwrites existing dataflowspec rows; if "False" it merges.
+    default: "True"
+
+  wheel_source:
+    description: Install style enforced by bundle-validate (pypi -> coordinate, volume_path -> /Volumes/...).
+    default: pypi
+
+  sdp_meta_dependency:
+    description: Pinned sdp-meta version (decision 8). Installed by the runner notebook and the onboarding job.
+    default: databricks-labs-sdp-meta==0.1.0
+
+  # No `type:` on booleans - bundles only accept `type: complex`; lone references keep the boolean type.
+  serverless:
+    description: Run the pipelines on serverless compute.
+    default: true
+
+  photon_enabled:
+    description: Enable Photon (ignored on serverless).
+    default: true

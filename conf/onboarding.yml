@@ -1,0 +1,34 @@
+# sdp-meta onboarding file - retail-org demo.
+# One entry per table ("data flow"). `data_flow_group` decides which pipeline builds it.
+# Keys ending in `_dev` are environment-specific (env = bundle target).
+# ${workspace.file_path}/conf/... references are rebased onto the UC config volume by stage_conf.
+#
+# Phase 2 (serverless smoke test): products only. Remaining tables added in phase 3.
+
+# ---------------------------------------------------------------- retail_reference
+- data_flow_id: "101"
+  data_flow_group: retail_reference
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: products
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/products/"
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: products
+  bronze_table_comment: "Raw products from retail-org (semicolon-delimited CSV)"
+  # Feature #3: reader options in metadata - products.csv uses ';' as delimiter.
+  bronze_reader_options:
+    cloudFiles.format: "csv"
+    header: "true"
+    sep: ";"
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_data_quality_expectations_json_dev: "${workspace.file_path}/conf/dqe/products/bronze_expectations.yml"
+  # sdp-meta v0.1.0 requires bronze_quarantine_table whenever a bronze DQE file is set.
+  bronze_database_quarantine_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_quarantine_table: products_quarantine
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: products
+  silver_table_comment: "Cleaned products"
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"

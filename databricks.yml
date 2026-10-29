@@ -1,0 +1,26 @@
+# Declarative Automation Bundle for the sdp-meta retail demo.
+# Scaffolded from the sdp-meta v0.1.0 bundle template (databricks labs sdp-meta bundle-init)
+# and adapted for this project. See README.md for the design decisions.
+bundle:
+  name: sdp_meta_retail
+
+include:
+  - resources/*.yml
+
+sync:
+  exclude:
+    - .gitignore
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+  prod:
+    mode: production
+    permissions:
+      - group_name: users
+        level: CAN_VIEW
+    # For CI/CD, run prod under a service principal:
+    # run_as:
+    #   service_principal_name: <your-prod-service-principal-application-id>

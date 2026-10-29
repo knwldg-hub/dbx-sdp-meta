@@ -1,0 +1,11 @@
+# Silver transformations for the retail_reference group.
+# One entry per target_table: select_exp = column projections from the bronze table.
+- target_table: products
+  select_exp:
+    - "CAST(product_id AS STRING) AS product_id"
+    - "product_category"
+    - "product_name"
+    - "CAST(sales_price AS DOUBLE) AS sales_price"
+    - "CAST(EAN13 AS STRING) AS ean13"
+    - "CAST(EAN5 AS STRING) AS ean5"
+    - "product_unit"

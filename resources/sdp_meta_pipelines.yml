@@ -1,0 +1,58 @@
+# Lakeflow Spark Declarative Pipelines driven by sdp-meta (template v0.1.0, adapted).
+# The runner notebook reads `layer` and `<layer>.dataflowspecTable` / `<layer>.group`
+# from the pipeline configuration and asks sdp-meta to build the graph.
+#
+# Topology (decision 5, option A): split bronze + silver pipeline per data_flow_group.
+# Phase 2 (serverless smoke test): retail_reference group only. retail_sales added in phase 4.
+
+resources:
+  pipelines:
+    bronze_retail_reference:
+      name: "sdp_meta_bronze_retail_reference"
+      tags:
+        sdp_meta: ${var.sdp_meta_version}
+      catalog: ${var.uc_catalog_name}
+      schema: ${var.bronze_target_schema}
+      photon: ${var.photon_enabled}
+      serverless: ${var.serverless}
+      libraries:
+        - notebook:
+            path: ${workspace.file_path}/notebooks/init_sdp_meta_pipeline
+      configuration:
+        layer: bronze
+        bronze.dataflowspecTable: ${var.uc_catalog_name}.${var.sdp_meta_schema}.${var.bronze_dataflowspec_table}
+        bronze.group: ${var.reference_group}
+        sdp_meta_dependency: ${var.sdp_meta_dependency}
+
+    silver_retail_reference:
+      name: "sdp_meta_silver_retail_reference"
+      tags:
+        sdp_meta: ${var.sdp_meta_version}
+      catalog: ${var.uc_catalog_name}
+      schema: ${var.silver_target_schema}
+      photon: ${var.photon_enabled}
+      serverless: ${var.serverless}
+      libraries:
+        - notebook:
+            path: ${workspace.file_path}/notebooks/init_sdp_meta_pipeline
+      configuration:
+        layer: silver
+        silver.dataflowspecTable: ${var.uc_catalog_name}.${var.sdp_meta_schema}.${var.silver_dataflowspec_table}
+        silver.group: ${var.reference_group}
+        sdp_meta_dependency: ${var.sdp_meta_dependency}
+
+  jobs:
+    pipelines:
+      name: "${bundle.name} - run pipelines"
+      description: "Runs the sdp-meta pipelines end-to-end (phase 2: retail_reference only)."
+      tasks:
+        - task_key: bronze_retail_reference
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.bronze_retail_reference.id}
+            full_refresh: false
+        - task_key: silver_retail_reference
+          depends_on:
+            - task_key: bronze_retail_reference
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.silver_retail_reference.id}
+            full_refresh: false
