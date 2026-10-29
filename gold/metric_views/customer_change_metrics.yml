@@ -1,0 +1,64 @@
+# Metric view <catalog>.<gold_schema>.customer_change_metrics.
+# Created by notebooks/create_metric_views, which fills in ${catalog} / ${silver_schema} / ${gold_schema}.
+# Grain: one row per customer change event (gold customer_history_changes, derived from SCD2 silver customers):
+#   NEW = first version, CHANGED = later version, DELETED = last version closed with no newer version.
+version: 1.1
+comment: "Customer change KPIs from SCD2 history: new / changed / deleted customers and loyalty segment movements over time"
+source: ${catalog}.${gold_schema}.customer_history_changes
+
+joins:
+  - name: segment
+    source: ${catalog}.${silver_schema}.loyalty_segments
+    on: source.loyalty_segment = segment.loyalty_segment_id
+  - name: prev_segment
+    source: ${catalog}.${silver_schema}.loyalty_segments
+    on: source.prev_loyalty_segment = prev_segment.loyalty_segment_id
+
+dimensions:
+  - name: Change Date
+    expr: change_date
+  - name: Change Week
+    expr: DATE_TRUNC('WEEK', change_date)
+  - name: Change Month
+    expr: DATE_TRUNC('MONTH', change_date)
+  - name: Change Type
+    expr: change_type
+    comment: "NEW, CHANGED or DELETED"
+  - name: State
+    expr: state
+  - name: City
+    expr: city
+  - name: Loyalty Segment
+    expr: "CASE WHEN source.loyalty_segment IS NULL THEN 'n/a' ELSE COALESCE(segment.loyalty_segment_description, CONCAT('Unmapped (', source.loyalty_segment, ')')) END"
+    comment: "Segment after the change (n/a for DELETED)"
+  - name: Previous Loyalty Segment
+    expr: "CASE WHEN source.prev_loyalty_segment IS NULL THEN 'n/a' ELSE COALESCE(prev_segment.loyalty_segment_description, CONCAT('Unmapped (', source.prev_loyalty_segment, ')')) END"
+    comment: "Segment before the change (n/a for NEW)"
+  - name: Segment Movement
+    expr: "CASE WHEN change_type <> 'CHANGED' THEN 'n/a' WHEN loyalty_segment_change > 0 THEN 'Upgrade' WHEN loyalty_segment_change < 0 THEN 'Downgrade' ELSE 'No change' END"
+    comment: "Direction of the loyalty segment change for CHANGED events"
+  - name: Is Current Version
+    expr: is_current
+
+measures:
+  - name: Change Events
+    expr: COUNT(1)
+  - name: Customers Affected
+    expr: COUNT(DISTINCT customer_id)
+  - name: New Customers
+    expr: COUNT(1) FILTER (WHERE change_type = 'NEW')
+  - name: Changed Customers
+    expr: COUNT(1) FILTER (WHERE change_type = 'CHANGED')
+    comment: "Number of update events (a customer changed twice counts twice)"
+  - name: Deleted Customers
+    expr: COUNT(1) FILTER (WHERE change_type = 'DELETED')
+  - name: Net Customer Change
+    expr: COUNT(1) FILTER (WHERE change_type = 'NEW') - COUNT(1) FILTER (WHERE change_type = 'DELETED')
+    comment: "New minus deleted customers"
+  - name: Segment Upgrades
+    expr: COUNT(1) FILTER (WHERE change_type = 'CHANGED' AND loyalty_segment_change > 0)
+  - name: Segment Downgrades
+    expr: COUNT(1) FILTER (WHERE change_type = 'CHANGED' AND loyalty_segment_change < 0)
+  - name: Avg Units Purchased Change
+    expr: AVG(units_purchased_change) FILTER (WHERE change_type = 'CHANGED')
+    comment: "Average change in units_purchased per update event"
