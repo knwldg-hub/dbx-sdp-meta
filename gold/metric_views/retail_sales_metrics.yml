@@ -1,0 +1,68 @@
+# Metric view <catalog>.<gold_schema>.retail_sales_metrics (decision 9).
+# Created by notebooks/create_metric_views, which fills in ${catalog} / ${silver_schema} / ${gold_schema}.
+# Grain: one row per order line (gold fact_order_lines). Joins are LEFT and many-to-one, so orders from
+# customers with no current record (deleted / unknown) still count toward revenue.
+version: 1.1
+comment: "Retail sales KPIs: orders, units, gross/discount/net revenue and promotion uptake by product, channel, customer and time"
+source: ${catalog}.${gold_schema}.fact_order_lines
+
+joins:
+  - name: customer
+    source: ${catalog}.${gold_schema}.dim_customer_current
+    on: source.customer_id = customer.customer_id
+  - name: promotion
+    source: ${catalog}.${silver_schema}.promotions
+    on: source.promotion_id = promotion.promotion_id
+
+dimensions:
+  - name: Order Date
+    expr: order_date
+  - name: Order Week
+    expr: DATE_TRUNC('WEEK', order_date)
+  - name: Order Month
+    expr: DATE_TRUNC('MONTH', order_date)
+  - name: Source Channel
+    expr: CASE source_channel WHEN 'sales_orders' THEN 'Batch (sales_orders)' WHEN 'sales_stream' THEN 'Streaming (sales_stream)' ELSE source_channel END
+    comment: "Which bronze feed the order came from (multi-source CDC into silver orders)"
+  - name: Product Category
+    expr: product_category
+  - name: Product Name
+    expr: product_name
+  - name: Customer State
+    expr: COALESCE(customer.state, 'Unknown')
+  - name: Customer City
+    expr: COALESCE(customer.city, 'Unknown')
+  - name: Loyalty Segment
+    expr: COALESCE(customer.loyalty_segment_description, 'Unknown')
+    comment: "Current loyalty segment of the customer; Unknown = no current customer record or unmapped segment"
+  - name: Promotion
+    expr: "CASE WHEN source.promotion_id IS NULL THEN 'No promotion' ELSE CONCAT('Promo ', source.promotion_id, ' - ', CAST(promotion.percent_discount * 100 AS INT), '% off, ', promotion.units_required, '+ units') END"
+  - name: On Promotion
+    expr: source.promotion_id IS NOT NULL
+
+measures:
+  - name: Orders
+    expr: COUNT(DISTINCT order_number)
+  - name: Order Lines
+    expr: COUNT(1)
+  - name: Units Sold
+    expr: SUM(quantity)
+  - name: Gross Revenue
+    expr: SUM(gross_amount)
+    comment: "Unit price x quantity, before promotion discounts"
+  - name: Discount Amount
+    expr: SUM(discount_amount)
+  - name: Net Revenue
+    expr: SUM(net_amount)
+    comment: "Gross revenue minus promotion discounts"
+  - name: Average Order Value
+    expr: SUM(net_amount) / COUNT(DISTINCT order_number)
+    comment: "Net revenue per distinct order"
+  - name: Unique Customers
+    expr: COUNT(DISTINCT source.customer_id)
+  - name: Discount Rate
+    expr: SUM(discount_amount) / SUM(gross_amount)
+    comment: "Share of gross revenue given away as promotion discounts"
+  - name: Promo Line Share
+    expr: COUNT(1) FILTER (WHERE source.promotion_id IS NOT NULL) / COUNT(1)
+    comment: "Share of order lines that used a promotion"

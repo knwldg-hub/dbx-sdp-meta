@@ -1,0 +1,34 @@
+# Metric view <catalog>.<gold_schema>.customer_metrics (decision 9).
+# Created by notebooks/create_metric_views, which fills in ${catalog} / ${silver_schema} / ${gold_schema}.
+# Grain: one row per current customer (gold dim_customer_current = SCD2 versions with __END_AT IS NULL).
+# Change events over time (NEW / CHANGED / DELETED) live in gold customer_history_changes.
+version: 1.1
+comment: "Customer and loyalty KPIs over the current version of each customer (SCD2)"
+source: ${catalog}.${gold_schema}.dim_customer_current
+
+dimensions:
+  - name: State
+    expr: state
+  - name: City
+    expr: city
+  - name: Region
+    expr: region
+  - name: Loyalty Segment
+    expr: COALESCE(loyalty_segment_description, CONCAT('Unmapped (', loyalty_segment, ')'))
+    comment: "Loyalty segment description; Unmapped = segment id not in loyalty_segments (kept by a warn-only expectation)"
+  - name: Loyalty Segment Id
+    expr: loyalty_segment
+  - name: Current Since Month
+    expr: DATE_TRUNC('MONTH', current_since)
+    comment: "Month the current version of the customer became effective"
+
+measures:
+  - name: Customers
+    expr: COUNT(1)
+  - name: Units Purchased
+    expr: SUM(units_purchased)
+  - name: Avg Units per Customer
+    expr: AVG(units_purchased)
+  - name: Unmapped Segment Customers
+    expr: COUNT(1) FILTER (WHERE loyalty_segment_description IS NULL)
+    comment: "Customers whose loyalty segment has no match in loyalty_segments"

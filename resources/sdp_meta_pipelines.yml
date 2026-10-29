@@ -96,7 +96,7 @@ resources:
   jobs:
     pipelines:
       name: "${bundle.name} - run pipelines"
-      description: "Runs bronze then silver for both groups in parallel, then gold."
+      description: "Runs bronze then silver for both groups in parallel, then gold, then (re)creates the metric views."
       tasks:
         - task_key: bronze_retail_reference
           pipeline_task:
@@ -125,3 +125,13 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.gold_retail.id}
             full_refresh: false
+        - task_key: metric_views
+          depends_on:
+            - task_key: gold_retail
+          # Serverless notebook task (no cluster spec). Recreates every view in gold/metric_views/.
+          notebook_task:
+            notebook_path: ${workspace.file_path}/notebooks/create_metric_views
+            base_parameters:
+              catalog: ${var.uc_catalog_name}
+              silver_schema: ${var.silver_target_schema}
+              gold_schema: ${var.gold_target_schema}
