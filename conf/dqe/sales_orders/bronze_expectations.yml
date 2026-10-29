@@ -1,0 +1,11 @@
+# Bronze expectations for sales_orders (feature #4 warn/drop/fail, #5 quarantine).
+# Baseline data already contains 45 orders with an empty order_datetime -> quarantined.
+expect_or_fail:
+  # fail: a missing order_number stops the retail_sales pipeline (failure-isolation demo)
+  valid_order_number: "order_number IS NOT NULL"
+expect_or_drop:
+  valid_order_datetime: "order_datetime IS NOT NULL AND order_datetime <> ''"
+expect_or_quarantine:
+  invalid_order_datetime: "order_datetime IS NULL OR order_datetime = ''"
+expect:
+  has_line_items: "size(ordered_products) > 0"

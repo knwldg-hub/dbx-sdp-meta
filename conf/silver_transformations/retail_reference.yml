@@ -9,3 +9,80 @@
     - "CAST(EAN13 AS STRING) AS ean13"
     - "CAST(EAN5 AS STRING) AS ean5"
     - "product_unit"
+
+# customers -> SCD2 target (feature #7). operation / operation_ts are kept here because the
+# AUTO CDC flow needs them; they are removed via except_column_list in onboarding.yml.
+- target_table: customers
+  select_exp:
+    - "CAST(customer_id AS STRING) AS customer_id"
+    - "CAST(tax_id AS STRING) AS tax_id"
+    - "tax_code"
+    - "customer_name"
+    - "state"
+    - "city"
+    - "CAST(postcode AS STRING) AS postcode"
+    - "street"
+    - "CAST(number AS STRING) AS street_number"
+    - "CAST(unit AS STRING) AS unit"
+    - "region"
+    - "district"
+    - "CAST(lon AS DOUBLE) AS lon"
+    - "CAST(lat AS DOUBLE) AS lat"
+    - "ship_to_address"
+    - "CAST(units_purchased AS DOUBLE) AS units_purchased"
+    - "CAST(loyalty_segment AS INT) AS loyalty_segment"
+    - "CAST(from_unixtime(CAST(valid_from AS BIGINT)) AS TIMESTAMP) AS source_valid_from"
+    - "operation"
+    - "CAST(operation_ts AS BIGINT) AS operation_ts"
+    - "_rescued_data"
+
+- target_table: loyalty_segments
+  select_exp:
+    - "CAST(loyalty_segment_id AS INT) AS loyalty_segment_id"
+    - "loyalty_segment_description"
+    - "CAST(unit_threshold AS INT) AS unit_threshold"
+    - "CAST(valid_from AS DATE) AS valid_from"
+    - "CAST(valid_to AS DATE) AS valid_to"
+
+# promotions: qualifying_products is a space-separated list (one value spans a line break)
+# -> normalised into an array of product ids.
+- target_table: promotions
+  select_exp:
+    - "CAST(promotion_id AS INT) AS promotion_id"
+    - "promotion_type"
+    - "CAST(dollar_discount AS DOUBLE) AS dollar_discount"
+    - "CAST(percent_discount AS DOUBLE) AS percent_discount"
+    - "split(trim(translate(qualifying_products, char(10), ' ')), ' +') AS qualifying_product_ids"
+    - "CAST(units_required AS INT) AS units_required"
+    - "CAST(free_product_ids AS STRING) AS free_product_ids"
+    - "CAST(length AS DOUBLE) AS length_days"
+    - "CAST(valid_from AS TIMESTAMP) AS valid_from"
+    - "CAST(valid_to AS TIMESTAMP) AS valid_to"
+
+- target_table: active_promotions
+  select_exp:
+    - "CAST(promo_customer AS STRING) AS customer_id"
+    - "promo_item AS product_id"
+    - "CAST(promo_id AS INT) AS promotion_id"
+    - "CAST(promo_disc AS DOUBLE) AS promo_disc"
+    - "CAST(from_unixtime(try_cast(promo_datetime AS BIGINT)) AS TIMESTAMP) AS promo_ts"
+    - "CAST(promo_qty AS INT) AS promo_qty"
+    - "CAST(cumsum AS INT) AS cumulative_qty"
+    - "CAST(from_unixtime(try_cast(promo_began AS BIGINT)) AS TIMESTAMP) AS promo_began_ts"
+    - "CAST(units_required AS INT) AS units_required"
+    - "CAST(eligible AS BOOLEAN) AS eligible"
+    - "CAST(from_unixtime(try_cast(deadline AS BIGINT)) AS TIMESTAMP) AS deadline_ts"
+
+# suppliers - used by the live "add a table with metadata only" moment (feature #9).
+- target_table: suppliers
+  select_exp:
+    - "CAST(SUPPLIER_ID AS STRING) AS supplier_id"
+    - "CAST(TAX_ID AS STRING) AS tax_id"
+    - "supplier_name"
+    - "state"
+    - "city"
+    - "CAST(postcode AS STRING) AS postcode"
+    - "region"
+    - "CAST(lon AS DOUBLE) AS lon"
+    - "CAST(lat AS DOUBLE) AS lat"
+    - "items_provided"

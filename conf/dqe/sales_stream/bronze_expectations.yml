@@ -1,0 +1,6 @@
+# Bronze expectations for sales_stream.
+expect_or_drop:
+  valid_order_number: "order_number IS NOT NULL"
+  valid_customer_id: "customer_id IS NOT NULL"
+expect_or_quarantine:
+  invalid_stream_record: "order_number IS NULL OR customer_id IS NULL"

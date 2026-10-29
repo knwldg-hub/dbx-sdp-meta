@@ -3,7 +3,9 @@
 # Keys ending in `_dev` are environment-specific (env = bundle target).
 # ${workspace.file_path}/conf/... references are rebased onto the UC config volume by stage_conf.
 #
-# Phase 2 (serverless smoke test): products only. Remaining tables added in phase 3.
+# Groups (decision 5): retail_reference = slow-changing reference data, retail_sales = transactions.
+# Every bronze table that has a DQE file also gets a <table>_quarantine table (sdp-meta v0.1.0
+# requires bronze_quarantine_table whenever a bronze DQE file is set).
 
 # ---------------------------------------------------------------- retail_reference
 - data_flow_id: "101"
@@ -17,6 +19,9 @@
   bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
   bronze_table: products
   bronze_table_comment: "Raw products from retail-org (semicolon-delimited CSV)"
+  bronze_table_properties:
+    quality: "bronze"
+  bronze_cluster_by_auto: true
   # Feature #3: reader options in metadata - products.csv uses ';' as delimiter.
   bronze_reader_options:
     cloudFiles.format: "csv"
@@ -30,5 +35,271 @@
   bronze_quarantine_table: products_quarantine
   silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
   silver_table: products
-  silver_table_comment: "Cleaned products"
+  silver_table_comment: "Cleaned products with typed price and EAN codes"
+  silver_table_properties:
+    quality: "silver"
+    delta.enableChangeDataFeed: "true"
+  silver_cluster_by:
+    - product_category
   silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+- data_flow_id: "102"
+  data_flow_group: retail_reference
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: customers
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/customers/"
+    # Feature #2/#8: Auto Loader file metadata captured on every row
+    source_metadata:
+      include_autoloader_metadata_column: "True"
+      autoloader_metadata_col_name: source_metadata
+      select_metadata_cols:
+        input_file_name: _metadata.file_name
+        input_file_modification_time: _metadata.file_modification_time
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: customers
+  bronze_table_comment: "Raw customer records incl. change history and CDC operation column"
+  bronze_reader_options:
+    cloudFiles.format: "csv"
+    header: "true"
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  bronze_cluster_by_auto: true
+  bronze_data_quality_expectations_json_dev: "${workspace.file_path}/conf/dqe/customers/bronze_expectations.yml"
+  bronze_database_quarantine_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_quarantine_table: customers_quarantine
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: customers
+  silver_table_comment: "Customers - SCD Type 2 history (__START_AT / __END_AT)"
+  silver_table_properties:
+    quality: "silver"
+    delta.enableChangeDataFeed: "true"
+  # Feature #7: SCD2 via AUTO CDC, sequenced by the source change timestamp
+  silver_cdc_apply_changes:
+    keys:
+      - customer_id
+    sequence_by: operation_ts
+    scd_type: "2"
+    apply_as_deletes: "operation = 'DELETE'"
+    except_column_list:
+      - operation
+      - operation_ts
+      - _rescued_data
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+- data_flow_id: "103"
+  data_flow_group: retail_reference
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: loyalty_segments
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/loyalty_segments/"
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: loyalty_segments
+  bronze_table_comment: "Raw loyalty segment definitions"
+  bronze_reader_options:
+    cloudFiles.format: "csv"
+    header: "true"
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: loyalty_segments
+  silver_table_comment: "Loyalty segments with unit thresholds"
+  silver_table_properties:
+    quality: "silver"
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+- data_flow_id: "104"
+  data_flow_group: retail_reference
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: promotions
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/promotions/"
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: promotions
+  bronze_table_comment: "Raw promotions (CSV with a quoted multi-line field)"
+  # Feature #3: multiLine + escape fix a quoted value that spans a line break
+  bronze_reader_options:
+    cloudFiles.format: "csv"
+    header: "true"
+    multiLine: "true"
+    escape: '"'
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: promotions
+  silver_table_comment: "Promotions with qualifying products as an array"
+  silver_table_properties:
+    quality: "silver"
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+- data_flow_id: "105"
+  data_flow_group: retail_reference
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: active_promotions
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/active_promotions/"
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: active_promotions
+  bronze_table_comment: "Raw customer progress towards promotions (Parquet)"
+  # Feature #2: same framework, different format - only cloudFiles.format changes
+  bronze_reader_options:
+    cloudFiles.format: "parquet"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: active_promotions
+  silver_table_comment: "Customer promotion progress with typed timestamps"
+  silver_table_properties:
+    quality: "silver"
+  silver_cluster_by:
+    - customer_id
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+# Feature #9 - LIVE DEMO: uncomment this block, redeploy, rerun onboarding + pipelines,
+# and the suppliers bronze + silver tables appear with no code change.
+# - data_flow_id: "106"
+#   data_flow_group: retail_reference
+#   source_system: retail_org
+#   source_format: cloudFiles
+#   source_details:
+#     source_database: retail_org
+#     source_table: suppliers
+#     source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_reference/suppliers/"
+#   bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+#   bronze_table: suppliers
+#   bronze_table_comment: "Raw suppliers"
+#   bronze_reader_options:
+#     cloudFiles.format: "csv"
+#     header: "true"
+#     cloudFiles.inferColumnTypes: "true"
+#     cloudFiles.rescuedDataColumn: "_rescued_data"
+#   bronze_table_properties:
+#     quality: "bronze"
+#   silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+#   silver_table: suppliers
+#   silver_table_comment: "Cleaned suppliers"
+#   silver_table_properties:
+#     quality: "silver"
+#   silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_reference.yml"
+
+# ---------------------------------------------------------------- retail_sales
+- data_flow_id: "201"
+  data_flow_group: retail_sales
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: sales_orders
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_sales/sales_orders/"
+    source_metadata:
+      include_autoloader_metadata_column: "True"
+      autoloader_metadata_col_name: source_metadata
+      select_metadata_cols:
+        input_file_name: _metadata.file_name
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: sales_orders
+  bronze_table_comment: "Raw sales orders (nested JSON, includes order revisions)"
+  bronze_reader_options:
+    cloudFiles.format: "json"
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  bronze_cluster_by_auto: true
+  bronze_data_quality_expectations_json_dev: "${workspace.file_path}/conf/dqe/sales_orders/bronze_expectations.yml"
+  bronze_database_quarantine_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_quarantine_table: sales_orders_quarantine
+
+- data_flow_id: "202"
+  data_flow_group: retail_sales
+  source_system: retail_org
+  source_format: cloudFiles
+  source_details:
+    source_database: retail_org
+    source_table: sales_stream
+    source_path_dev: "/Volumes/mg_aws_serverless_workspace_catalog/sdp_meta_landing/files/retail_sales/sales_stream/"
+    source_metadata:
+      include_autoloader_metadata_column: "True"
+      autoloader_metadata_col_name: source_metadata
+      select_metadata_cols:
+        input_file_name: _metadata.file_name
+  bronze_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_table: sales_stream
+  bronze_table_comment: "Raw streaming sales events, one small JSON file per 5 minutes"
+  bronze_reader_options:
+    cloudFiles.format: "json"
+    cloudFiles.inferColumnTypes: "true"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+  bronze_table_properties:
+    quality: "bronze"
+  bronze_cluster_by_auto: true
+  bronze_data_quality_expectations_json_dev: "${workspace.file_path}/conf/dqe/sales_stream/bronze_expectations.yml"
+  bronze_database_quarantine_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_bronze"
+  bronze_quarantine_table: sales_stream_quarantine
+
+# Silver-only row (features #6 + #10): ONE silver `orders` table fed by BOTH bronze sources
+# via multi-source AUTO CDC. Each flow normalises its own shape of ordered_products
+# (struct array vs. positional string array) into one schema; SCD1 on order_number keeps the
+# latest revision of each order (sales_orders has 74 revised orders, sales_stream has 1).
+- data_flow_id: "203"
+  data_flow_group: retail_sales
+  silver_database_dev: "mg_aws_serverless_workspace_catalog.sdp_meta_silver"
+  silver_table: orders
+  silver_table_comment: "Orders from batch + streaming channels, latest revision per order"
+  silver_table_properties:
+    quality: "silver"
+    delta.enableChangeDataFeed: "true"
+  silver_transformation_json_dev: "${workspace.file_path}/conf/silver_transformations/retail_sales.yml"
+  silver_cdc_apply_changes_flows:
+    keys:
+      - order_number
+    sequence_by: sequence_ts
+    scd_type: "1"
+    except_column_list:
+      - sequence_ts
+    flows:
+      - name: orders_from_sales_orders
+        source_format: delta
+        source_details:
+          source_catalog: mg_aws_serverless_workspace_catalog
+          source_database: sdp_meta_bronze
+          source_table: sales_orders
+        select_exp:
+          - "order_number"
+          - "CAST(customer_id AS STRING) AS customer_id"
+          - "customer_name"
+          - "CAST(from_unixtime(try_cast(order_datetime AS BIGINT)) AS TIMESTAMP) AS order_ts"
+          - "CAST(number_of_line_items AS INT) AS number_of_line_items"
+          - "transform(ordered_products, p -> named_struct('product_id', p.id, 'product_name', p.name, 'currency', p.curr, 'price', CAST(p.price AS DOUBLE), 'qty', CAST(p.qty AS INT), 'unit', p.unit, 'promo_id', CAST(p.promotion_info.promo_id AS INT), 'promo_disc', CAST(p.promotion_info.promo_disc AS DOUBLE))) AS order_lines"
+          - "'sales_orders' AS source_channel"
+          - "try_cast(order_datetime AS BIGINT) AS sequence_ts"
+      - name: orders_from_sales_stream
+        source_format: delta
+        source_details:
+          source_catalog: mg_aws_serverless_workspace_catalog
+          source_database: sdp_meta_bronze
+          source_table: sales_stream
+        select_exp:
+          - "order_number"
+          - "CAST(customer_id AS STRING) AS customer_id"
+          - "customer_name"
+          - "CAST(from_unixtime(try_cast(order_datetime AS BIGINT)) AS TIMESTAMP) AS order_ts"
+          - "CAST(number_of_line_items AS INT) AS number_of_line_items"
+          - "transform(ordered_products, p -> named_struct('product_id', p[1], 'product_name', p[2], 'currency', p[0], 'price', CAST(p[3] AS DOUBLE), 'qty', CAST(p[4] AS INT), 'unit', p[5], 'promo_id', CAST(NULL AS INT), 'promo_disc', CAST(NULL AS DOUBLE))) AS order_lines"
+          - "'sales_stream' AS source_channel"
+          - "try_cast(order_datetime AS BIGINT) AS sequence_ts"

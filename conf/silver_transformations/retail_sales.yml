@@ -1,0 +1,8 @@
+# Silver transformations for the retail_sales group.
+# The merged silver `orders` table (features #6 and #10) is defined directly in onboarding.yml
+# via silver_cdc_apply_changes_flows, because each source needs its own select_exp to
+# normalise two different shapes of ordered_products into one schema.
+# This file only needs a placeholder entry so the silver onboarding join has a file to read.
+- target_table: orders
+  select_exp:
+    - "*"

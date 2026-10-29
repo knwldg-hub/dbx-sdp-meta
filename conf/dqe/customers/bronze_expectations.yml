@@ -1,0 +1,12 @@
+# Bronze expectations for customers (feature #4 warn/drop, #5 quarantine).
+# Quarantine rule describes BAD rows (sdp-meta keeps matches in customers_quarantine);
+# the inverse expect_or_drop rules keep them out of the main table.
+expect_or_drop:
+  valid_customer_id: "customer_id IS NOT NULL"
+  valid_operation: "operation IN ('INSERT', 'UPDATE', 'DELETE')"
+expect_or_quarantine:
+  invalid_customer_record: "customer_id IS NULL OR operation IS NULL OR operation NOT IN ('INSERT', 'UPDATE', 'DELETE')"
+expect:
+  # warn only - tracked in pipeline metrics, rows kept
+  known_loyalty_segment: "loyalty_segment IN (0, 1, 2, 3)"
+  has_state: "state IS NOT NULL"
