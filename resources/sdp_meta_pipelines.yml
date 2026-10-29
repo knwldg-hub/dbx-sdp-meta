@@ -3,7 +3,8 @@
 # from the pipeline configuration and asks sdp-meta to build the graph.
 #
 # Topology (decision 5, option A): split bronze + silver pipeline per data_flow_group.
-# 4 serverless triggered pipelines: {bronze, silver} x {retail_reference, retail_sales}.
+# 4 serverless triggered pipelines: {bronze, silver} x {retail_reference, retail_sales},
+# plus the hand-written SQL gold pipeline (decision 9) that reads silver.
 
 resources:
   pipelines:
@@ -77,10 +78,25 @@ resources:
         silver.group: ${var.sales_group}
         sdp_meta_dependency: ${var.sdp_meta_dependency}
 
+    gold_retail:
+      name: "sdp_meta_gold_retail"
+      tags:
+        sdp_meta: ${var.sdp_meta_version}
+      catalog: ${var.uc_catalog_name}
+      schema: ${var.gold_target_schema}
+      photon: ${var.photon_enabled}
+      serverless: ${var.serverless}
+      libraries:
+        - file:
+            path: ${workspace.file_path}/gold/gold_retail.sql
+      configuration:
+        silver_schema: ${var.silver_target_schema}
+        gold_schema: ${var.gold_target_schema}
+
   jobs:
     pipelines:
       name: "${bundle.name} - run pipelines"
-      description: "Runs the sdp-meta bronze then silver pipelines for both groups in parallel."
+      description: "Runs bronze then silver for both groups in parallel, then gold."
       tasks:
         - task_key: bronze_retail_reference
           pipeline_task:
@@ -101,4 +117,11 @@ resources:
             - task_key: bronze_retail_sales
           pipeline_task:
             pipeline_id: ${resources.pipelines.silver_retail_sales.id}
+            full_refresh: false
+        - task_key: gold_retail
+          depends_on:
+            - task_key: silver_retail_reference
+            - task_key: silver_retail_sales
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.gold_retail.id}
             full_refresh: false
