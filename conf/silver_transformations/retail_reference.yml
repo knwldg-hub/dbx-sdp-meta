@@ -15,7 +15,8 @@
 - target_table: customers
   select_exp:
     - "CAST(customer_id AS STRING) AS customer_id"
-    - "CAST(tax_id AS STRING) AS tax_id"
+    # tax_id is inferred as DOUBLE in bronze; go via BIGINT to avoid '6.54561024E8'
+    - "CAST(CAST(tax_id AS BIGINT) AS STRING) AS tax_id"
     - "tax_code"
     - "customer_name"
     - "state"

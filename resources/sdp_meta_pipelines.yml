@@ -57,6 +57,8 @@ resources:
         bronze.dataflowspecTable: ${var.uc_catalog_name}.${var.sdp_meta_schema}.${var.bronze_dataflowspec_table}
         bronze.group: ${var.sales_group}
         sdp_meta_dependency: ${var.sdp_meta_dependency}
+        # expect_or_fail on sales_orders is demoed live: fail once instead of retrying 3x (~9 min)
+        pipelines.numUpdateRetryAttempts: "0"
 
     silver_retail_sales:
       name: "sdp_meta_silver_retail_sales"
