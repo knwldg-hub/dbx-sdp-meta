@@ -1,0 +1,62 @@
+# Main end-to-end demo job (decision 5): onboard -> bronze x2 (parallel) -> silver x2 (parallel)
+# -> gold -> metric views. Onboarding reuses the template onboarding job via run_job_task so the
+# dataflowspec tables are refreshed from conf/ before any pipeline runs.
+
+resources:
+  jobs:
+    sdp_meta_retail_demo:
+      name: "sdp_meta_retail_demo"
+      description: "sdp-meta retail demo end to end: onboarding -> bronze -> silver (per data_flow_group) -> gold -> metric views."
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      tags:
+        sdp_meta: ${var.sdp_meta_version}
+      tasks:
+        - task_key: onboard
+          run_job_task:
+            job_id: ${resources.jobs.onboarding.id}
+
+        - task_key: bronze_retail_reference
+          depends_on:
+            - task_key: onboard
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.bronze_retail_reference.id}
+            full_refresh: false
+        - task_key: bronze_retail_sales
+          depends_on:
+            - task_key: onboard
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.bronze_retail_sales.id}
+            full_refresh: false
+
+        - task_key: silver_retail_reference
+          depends_on:
+            - task_key: bronze_retail_reference
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.silver_retail_reference.id}
+            full_refresh: false
+        - task_key: silver_retail_sales
+          depends_on:
+            - task_key: bronze_retail_sales
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.silver_retail_sales.id}
+            full_refresh: false
+
+        - task_key: gold_retail
+          depends_on:
+            - task_key: silver_retail_reference
+            - task_key: silver_retail_sales
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.gold_retail.id}
+            full_refresh: false
+
+        - task_key: metric_views
+          depends_on:
+            - task_key: gold_retail
+          notebook_task:
+            notebook_path: ${workspace.file_path}/notebooks/create_metric_views
+            base_parameters:
+              catalog: ${var.uc_catalog_name}
+              silver_schema: ${var.silver_target_schema}
+              gold_schema: ${var.gold_target_schema}
